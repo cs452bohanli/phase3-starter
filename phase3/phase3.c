@@ -313,11 +313,11 @@ FaultHandler(type, arg)
     assert(fault.mbox >= 0);
     size = sizeof(fault);
     status = P2_MboxSend(pagerMbox, &fault, &size);
-    assert(status == 0);
+    assert(status >= 0);
     assert(size == sizeof(fault));
     size = 0;
     status = P2_MboxReceive(fault.mbox, NULL, &size);
-    assert(status == 0);
+    assert(status >= 0);
     status = P2_MboxRelease(fault.mbox);
     assert(status == 0);
 }
@@ -373,4 +373,10 @@ CheckMode(void)
 	   USLOSS_Halt(1);
     }
 }
+
+int P3_Startup(void *arg)
+{
+    return 0;
+}
+
 

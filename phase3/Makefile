@@ -25,13 +25,13 @@ endif
 USLOSS_VERSION = 2.12
 
 # Set to version of Phase 1 you want to use.
-PHASE1_VERSION = 1.4
+PHASE1_VERSION = 1.5
 
 # Set to version of Phase 2 you want to use.
 PHASE2_VERSION = 2.0
 
 #Set to the version of the user library you want to use.
-USER_VERSION = 1.2
+USER_VERSION = 1.3
 
 SRCS = $(wildcard *.c)
 
@@ -42,7 +42,7 @@ TESTS = $(patsubst %.c,%,$(wildcard tests/*.c))
 VGFLAGS = --track-origins=yes --leak-check=full --max-stackframe=100000
 
 # Change this if you need to link against additional libraries (probably not).
-LIBS = -lphase$(PHASE2_VERSION) -lphase$(PHASE1_VERSION) -lusloss$(USLOSS_VERSION) -luser$(USER_VERSION)
+LIBS = -lphase$(PHASE2_VERSION) -lphase$(PHASE1_VERSION) -lphase3 -lusloss$(USLOSS_VERSION) -luser$(USER_VERSION)
 
 # Change this if you want change which flags are passed to the C compiler.
 CFLAGS += -Wall -g -DPHASE_3
