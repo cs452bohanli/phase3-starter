@@ -81,7 +81,7 @@ P4_Startup(void *arg)
     int		numChildren = sizeof(names) / sizeof(char *);
 
     USLOSS_Console("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, 0, (void **) &vmRegion);
+    rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, 1, (void **) &vmRegion);
     if (rc != 0) {
 	   USLOSS_Console("Sys_VmInit failed: %d\n", rc);
 	   USLOSS_Halt(1);
