@@ -100,6 +100,7 @@ P4_Startup(void *arg)
         rc = Sys_Wait(&pid, &child);
         assert(rc == 0);
     }
+    Sys_VmDestroy();
     USLOSS_Console("P4_Startup done.\n");
     return 0;
 }
