@@ -76,9 +76,17 @@ void	P3_Quit(int pid);
  *
  *	Initializes the VM system by configuring the MMU and setting
  *	up the page tables.
+ *
+ * Parameters:
+ *      mappings: # of mappings MMU can hold
+ *      pages: # of pages in the VM region
+ *      frames: # of frames of physical memory
+ *      pagers: # of pager daemons
  *	
  * Results:
- *      MMU return status
+ *      0: success
+ *     -1: error
+ *     -2: MMU already initialized
  *
  * Side effects:
  *      The MMU is initialized.
@@ -162,17 +170,19 @@ P3_VmDestroy(void)
  *
  *	Sets up a page table for the new process.
  *
+ * Parameters:
+ *      pid : pid of new process
+ *
  * Results:
- *	None.
+ *	 None.
  *
  * Side effects:
- *	A page table is allocated.
+ *	 A page table is allocated.
  *
  *----------------------------------------------------------------------
  */
 void
-P3_Fork(pid)
-    int		pid;		/* New process */
+P3_Fork(int pid)
 {
     int		i;
 
@@ -194,7 +204,11 @@ P3_Fork(pid)
  *
  *	Called when a process quits and tears down the page table 
  *	for the process and frees any frames and disk space used
- *      by the process.
+ *  by the process.
+ *
+ * Parameters:
+ *      pid: pid of process that is quitting
+ *
  *
  * Results:
  *	None
@@ -205,8 +219,7 @@ P3_Fork(pid)
  *----------------------------------------------------------------------
  */
 void
-P3_Quit(pid)
-    int		pid;
+P3_Quit(int pid)
 {
     CheckMode();
     CheckPid(pid);
@@ -233,6 +246,11 @@ P3_Quit(pid)
  *	Called during a context switch. Unloads the mappings for the old
  *	process and loads the mappings for the new.
  *
+ *
+ * Parameters:
+ *      old: pid of currently running process
+ *      new: pid of next process to run
+ *
  * Results:
  *	None.
  *
@@ -242,9 +260,7 @@ P3_Quit(pid)
  *----------------------------------------------------------------------
  */
 void
-P3_Switch(old, new)
-    int		old;	/* Old (current) process */
-    int		new;	/* New process */
+P3_Switch(int old, int new)
 {
     int		page;
     int		status;
@@ -290,6 +306,10 @@ P3_Switch(old, new)
  *
  *	Handles an MMU interrupt. 
  *
+ * Parameters:
+ *      type: USLOSS_MMU_INT
+ *      arg: offset of the faulting address from the start of the VM region
+ *
  * Results:
  *	None.
  *
@@ -299,9 +319,7 @@ P3_Switch(old, new)
  *----------------------------------------------------------------------
  */
 static void
-FaultHandler(type, arg)
-    int		type;	/* USLOSS_MMU_INT */
-    void	*arg;	/* Address that caused the fault */
+FaultHandler(int type, void *arg) 
 {
     int		cause;
     int		status;
@@ -335,6 +353,9 @@ FaultHandler(type, arg)
  *	Kernel process that handles page faults and does page 
  *	replacement.
  *
+ * Parameters:
+ *      arg: not used
+ *
  * Results:
  *	None.
  *
@@ -344,7 +365,7 @@ FaultHandler(type, arg)
  *----------------------------------------------------------------------
  */
 static int
-Pager(void)
+Pager(void *arg)
 {
     while(1) {
     	/* Wait for fault to occur (receive from pagerMbox) */
