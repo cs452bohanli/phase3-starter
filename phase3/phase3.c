@@ -91,12 +91,16 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     int		status;
     int		i;
     int		tmp;
+    int     result = 0;
 
     CheckMode();
     status = USLOSS_MmuInit(mappings, pages, frames);
-    if (status != USLOSS_MMU_OK) {
-	   USLOSS_Console("P3_VmInit: couldn't initialize MMU, status %d\n", status);
-	   USLOSS_Halt(1);
+    if (status == USLOSS_MMU_ERR_ON) {
+        result = -2;
+        goto done;
+    } else if (status != USLOSS_MMU_OK) {
+        result = -1;
+        goto done;
     }
     vmRegion = USLOSS_MmuRegion(&tmp);
     assert(vmRegion != NULL);
@@ -115,7 +119,8 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     P3_vmStats.frames = frames;
     numPages = pages;
     numFrames = frames;
-    return numPages * USLOSS_MmuPageSize();
+done:
+    return result;
 }
 /*
  *----------------------------------------------------------------------
