@@ -105,16 +105,9 @@ P4_Startup(void *arg)
     return 0;
 }
 
+
 void setup(void) {
-    int rc;
-    // Create the swap disk.
-    rc = system("makedisk 1 100");
-    assert(rc == 0);
 }
 
 void cleanup(void) {
-    // Delete the swap disk.
-    int rc;
-    rc = unlink("disk1");
-    assert(rc == 0);
 }
