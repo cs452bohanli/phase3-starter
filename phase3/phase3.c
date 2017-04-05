@@ -51,8 +51,17 @@ static int pagerMbox = -1;
 #define ALREADY_INITIALIZED -2
 #define STACKSIZE (USLOSS_MIN_STACK * 3) // change if your pagers need more stack
 
+// Helpful macros
+
+#define CheckMode() \
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0) { \
+        int pid; \
+        Sys_GetPID(&pid); \
+        USLOSS_Console("Process %d called %s from user mode.\n", pid, __FUNCTION__); \
+        USLOSS_IllegalInstruction(); \
+    }
+
 static void CheckPid(int);
-static void CheckMode(void);
 static void FaultHandler(int type, void *arg);
 static int  Pager(void *arg);
 
@@ -373,15 +382,6 @@ CheckPid(int pid)
     if ((pid < 0) || (pid >= P1_MAXPROC)) {
     	USLOSS_Console("Invalid pid\n"); 
     	USLOSS_Halt(1);
-    }
-}
-
-static void
-CheckMode(void)
-{
-    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0) {
-	   USLOSS_Console("Invoking protected routine from user mode\n");
-	   USLOSS_Halt(1);
     }
 }
 
