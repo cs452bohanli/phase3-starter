@@ -7,8 +7,6 @@
 #include <usloss.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <phase1.h>
-#include <phase2.h>
 
 /*
  * Maximum number of pager processes.
