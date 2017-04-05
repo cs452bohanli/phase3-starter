@@ -7,7 +7,10 @@
  */
 
 #include <assert.h>
+#include <phase1.h>
+#include <phase2.h>
 #include <phase3.h>
+#include <usloss.h>
 #include <string.h>
 
 
