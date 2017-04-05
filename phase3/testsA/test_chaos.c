@@ -111,6 +111,7 @@ P4_Startup(void *arg)
     char    name[100];
 
     USLOSS_Console("P4_Startup starting.\n");
+    USLOSS_Console("NOTE: this test will hang if run with the skeleton phase3.c.\n");
     USLOSS_Console("Pages: %d, Frames: %d, Children %d, Iterations %d, Priority %d, Pagers %d\n",
     PAGES, FRAMES, CHILDREN, ITERATIONS, PRIORITY, PAGERS);
     rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion);

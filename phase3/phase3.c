@@ -12,6 +12,7 @@
 #include <phase3.h>
 #include <usloss.h>
 #include <string.h>
+#include <libuser.h>
 
 
 /*
@@ -43,13 +44,20 @@ P3_VmStats	P3_vmStats;
 
 static int pagerMbox = -1;
 
+// Helpful constants
+
 #define MBOX_RELEASED -2
+#define ILLEGAL_PARAMS -1
+#define ALREADY_INITIALIZED -2
+#define STACKSIZE (USLOSS_MIN_STACK * 3) // change if your pagers need more stack
 
 static void CheckPid(int);
 static void CheckMode(void);
 static void FaultHandler(int type, void *arg);
+static int  Pager(void *arg);
 
 static int initialized = 0;
+static P1_Semaphore running;
 
 
 /*
@@ -87,10 +95,10 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     CheckMode();
     status = USLOSS_MmuInit(mappings, pages, frames, USLOSS_MMU_MODE_PAGETABLE);
     if (status == USLOSS_MMU_ERR_ON) {
-        result = -2;
+        result = ALREADY_INITIALIZED;
         goto done;
     } else if (status != USLOSS_MMU_OK) {
-        result = -1;
+        result = ILLEGAL_PARAMS;
         goto done;
     }
     vmRegion = USLOSS_MmuRegion(&tmp);
@@ -100,6 +108,19 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     for (i = 0; i < P1_MAXPROC; i++) {
     	processes[i].numPages = 0;
     	processes[i].pageTable = NULL;
+    }
+
+    status = P1_SemCreate("running", 0, &running);
+    assert(status == 0);
+
+    pagerMbox = P2_MboxCreate(P1_MAXPROC, sizeof(Fault));
+    assert(pagerMbox >= 0);
+
+    for (int i = 0; i < pagers; i++) {
+        char name[30];
+        snprintf(name, sizeof(name), "Pager %d\n", i);
+        status = P1_Fork(name, Pager, (void *) i, STACKSIZE, 2, 0);
+        assert(status >= 0);
     }
     /*
      * Create the page fault mailbox and fork the pagers here.
@@ -305,10 +326,25 @@ FaultHandler(int type, void *arg)
 static int
 Pager(void *arg)
 {
+    int     number = (int) arg;
     int     status;
     Fault   fault;
     int     size;
+    int     pid;
+
+    pid = P1_GetPID();
+    USLOSS_Console("Pager %d (%d) starting.\n", number, pid);
+    /*
+     * Let the parent know we are running and enable interrupts.
+     */
+    status = P1_V(running);
+    assert(status == 0);
+    status = USLOSS_PsrSet(USLOSS_PsrGet() | USLOSS_PSR_CURRENT_INT);
+    assert(status == 0);
+
+    // Start servicing faults.
     while(1) {
+        USLOSS_Console("Pager %d waiting for a fault.\n", number); 
         size = sizeof(fault);
         status = P2_MboxReceive(pagerMbox, &fault, &size);
         if (status == MBOX_RELEASED) {
@@ -317,6 +353,7 @@ Pager(void *arg)
         assert(status >= 0);
         assert(size == sizeof(fault));
 
+        USLOSS_Console("Pager %d received fault from pid %d.\n", number, fault.pid); 
     	/* Find a free frame */
     	/* If there isn't one run clock algorithm, write page to disk if necessary */
     	/* Load page into frame from disk or fill with zeros */
@@ -350,6 +387,18 @@ CheckMode(void)
 
 int P3_Startup(void *arg)
 {
+    int pid;
+    int pid4;
+    int status;
+    int rc;
+
+    rc = Sys_Spawn("P4_Startup", P4_Startup, NULL,  3 * USLOSS_MIN_STACK, 3, &pid4);
+    assert(rc == 0);
+    assert(pid4 >= 0);
+    rc = Sys_Wait(&pid, &status);
+    assert(rc == 0);
+    assert(pid == pid4);
+    Sys_VmDestroy();
     return 0;
 }
 

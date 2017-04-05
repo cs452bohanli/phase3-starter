@@ -105,6 +105,7 @@ P4_Startup(void *arg)
     int     numChildren = sizeof(names) / sizeof(char *);
 
     USLOSS_Console("P4_Startup starting.\n");
+    USLOSS_Console("NOTE: this test will hang if run with the skeleton phase3.c.\n");
     rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, 1, (void **) &vmRegion);
     if (rc != 0) {
         USLOSS_Console("Sys_VmInit failed: %d\n", rc);
