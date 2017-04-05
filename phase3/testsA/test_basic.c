@@ -40,6 +40,8 @@ int debugging = 1;
 int debugging = 0;
 #endif /* DEBUG */
 
+static void debug(char *fmt, ...) __attribute__ ((unused)); // may be unused
+
 static void
 debug(char *fmt, ...)
 {
