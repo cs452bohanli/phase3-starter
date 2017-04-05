@@ -40,6 +40,8 @@ P3_VmStats	P3_vmStats;
 
 static int pagerMbox = -1;
 
+#define MBOX_RELEASED -2
+
 static void CheckPid(int);
 static void CheckMode(void);
 static void FaultHandler(int type, void *arg);
@@ -271,9 +273,11 @@ FaultHandler(int type, void *arg)
     assert(size == sizeof(fault));
     size = 0;
     status = P2_MboxReceive(fault.mbox, NULL, &size);
-    assert(status >= 0);
-    status = P2_MboxRelease(fault.mbox);
-    assert(status == 0);
+    if (status != MBOX_RELEASED) {
+        assert(status >= 0);
+        status = P2_MboxRelease(fault.mbox);
+        assert(status == 0);
+    }
 }
 
 /*
@@ -304,6 +308,9 @@ Pager(void *arg)
     while(1) {
         size = sizeof(fault);
         status = P2_MboxReceive(pagerMbox, &fault, &size);
+        if (status == MBOX_RELEASED) {
+            break;
+        }
         assert(status >= 0);
         assert(size == sizeof(fault));
 

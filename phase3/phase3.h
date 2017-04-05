@@ -38,11 +38,16 @@ typedef struct P3_VmStats {
 
 extern P3_VmStats P3_vmStats;
 
-extern int          P3_VmInit(int mappings, int pages, int frames, int pagers);
+
+#ifndef CHECKRETURN
+#define CHECKRETURN __attribute__((warn_unused_result))
+#endif
+
+extern int          P3_VmInit(int mappings, int pages, int frames, int pagers) CHECKRETURN;
 extern void         P3_VmDestroy(void);
-extern  USLOSS_PTE  *P3_AllocatePageTable(int pid);
+extern  USLOSS_PTE  *P3_AllocatePageTable(int pid) CHECKRETURN;
 extern  void        P3_FreePageTable(int pid);
 
-extern int  P4_Startup(void *);
+extern int  P4_Startup(void *) CHECKRETURN;
 
 #endif
