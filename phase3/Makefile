@@ -25,7 +25,7 @@ PART = A
 PHASE3_VERSION = 3.0
 
 # Set to Phase 2 version
-PHASE2_VERSION = 2.4
+PHASE2_VERSION = 2.5
 
 # Set to USLOSS version
 USLOSS_VERSION = 3.6
