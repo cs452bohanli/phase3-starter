@@ -1,9 +1,8 @@
-# This is a sample Makefile for Phase 3. Update the variables below as appropriate. It
-# provides the following targets (assume test source files are named testN.c in this
-# description).
+# Version 2.0
+# This is a sample Makefile for Phase 2. 
 #
-#	make		(makes libphase3.a and all tests)
-#        make phase1     ditto
+#	make		(makes libphase2.a and all tests)
+#   make phase2 ditto
 #
 #	make testN 	(makes testN)
 #	make testN.out	(runs testN and puts output in testN.out)
@@ -15,46 +14,56 @@
 #
 #	make clean	(removes all files created by this Makefile)
 
-ifndef CS452_STUDENTS
-	452-STUDENTS = $(HOME)/Dropbox/452-students
-else
-	452-STUDENTS = $(CS452_STUDENTS)
+ifndef PREFIX
+	PREFIX = $(HOME)
 endif
 
-# Set to version of USLOSS you want to use.
-USLOSS_VERSION = 2.12
+# Set to the part (A or B) of the phase.
+PART = A
 
-# Set to version of Phase 1 you want to use.
-PHASE1_VERSION = 1.7
+# Set to Phase 3 version
+PHASE3_VERSION = 3.0
 
-# Set to version of Phase 2 you want to use.
-PHASE2_VERSION = 2.0
+# Set to Phase 2 version
+PHASE2_VERSION = 2.4
 
-#Set to the version of the user library you want to use.
-USER_VERSION = 1.3
+# Set to USLOSS version
+USLOSS_VERSION = 3.6
 
+# Set to Phase 1 version
+PHASE1_VERSION = 1.8
+
+# Set to user library version (same as USLOSS version by default)
+USER_VERSION = $(USLOSS_VERSION)
+
+# All .c files in this directory are included in the Phase 3 library.
 SRCS = $(wildcard *.c)
 
-# Add any tests here. If the test is named test0 then the source file is assumed to be test0.c.
-TESTS = $(patsubst %.c,%,$(wildcard tests/*.c))
+# Each .c file in the tests$(PART) subdirectory is a separate test case.
+TESTS = $(patsubst %.c,%,$(wildcard tests$(PART)/*.c))
 
 # Change this if you want to change the arguments to valgrind.
 VGFLAGS = --track-origins=yes --leak-check=full --max-stackframe=100000
 
 # Change this if you need to link against additional libraries (probably not).
-LIBS = -lphase$(PHASE2_VERSION) -lphase$(PHASE1_VERSION) -lphase3 -lusloss$(USLOSS_VERSION) -luser$(USER_VERSION)
+LIBS = -lphase$(PHASE1_VERSION) -lusloss$(USLOSS_VERSION) -lphase$(PHASE2_VERSION) \
+-lphase$(PHASE3_VERSION) -luser$(USER_VERSION) -ldisk$(USLOSS_VERSION)
 
 # Change this if you want change which flags are passed to the C compiler.
-CFLAGS += -Wall -Werror -g -DPHASE_3
-CFLAGS += -DDEBUG
+CFLAGS += -Wall -g -std=gnu99
+#CFLAGS += -DDEBUG
 
 # You shouldn't need to change anything below here. 
 
+LIB_DIR = $(PREFIX)/lib
+INC_DIR	= $(PREFIX)/include
+INSTALL_DATA = /usr/bin/install -c
+
 PHASE = phase3
 
-TARGET = lib$(PHASE).a
+TARGET = libphase$(PHASE3_VERSION).a
 
-INCLUDES = -I$(452-STUDENTS)/include -I.
+INCLUDES = -I$(INC_DIR) -I.
 
 ifeq ($(shell uname),Darwin)
 	DEFINES += -D_XOPEN_SOURCE
@@ -65,12 +74,11 @@ else
 	CFLAGS += -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-unused-but-set-variable
 endif
 
-
 CC=gcc
 LD=gcc
 AR=ar    
-CFLAGS += $(INCLUDES) $(DEFINES)
-LDFLAGS = -L$(452-STUDENTS)/lib/$(OS) -L.
+CFLAGS += $(INCLUDES) $(DEFINES) -Werror -DPHASE_3
+LDFLAGS = -L$(LIB_DIR) -L.
 COBJS = ${SRCS:.c=.o}
 DEPS = ${COBJS:.o=.d}
 TSRCS = {$TESTS:=.c}
@@ -94,9 +102,13 @@ endif
 %.d: %.c
 	$(CC) -c $(CFLAGS) -MM -MF $@ $<
 
+.PHONY: all tests $(PHASE)
+
 all: $(PHASE)
 
 $(PHASE): $(TARGET) $(TESTS)
+
+lib: $(TARGET)
 
 
 $(TARGET):  $(COBJS)
@@ -116,7 +128,7 @@ $(TESTS):   %: $(TARGET) %.o Makefile
 	- $(LD) $(LDFLAGS) -o $@ $@.o $(LIBFLAGS)
 
 clean:
-	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TVS) *.out tests/*.out
+	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TVS) *.out tests$(PART)/*.out p3/*.o p3/p3stubsTest
 
 %.d: %.c
 	$(CC) -c $(CFLAGS) -MM -MF $@ $<
@@ -125,5 +137,8 @@ valgrind: $(TVS)
 
 %.v: %
 	valgrind $(VGFLAGS) ./$< 1> $@ 2>&1
+
+p3/p3stubsTest: $(STUBS) p3/p3stubsTest.o
+	$(LD) $(LDFLAGS) -o $@ $^
 
 -include $(DEPS)

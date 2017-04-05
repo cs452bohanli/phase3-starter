@@ -4,10 +4,6 @@
 #ifndef _PHASE3_H
 #define _PHASE3_H
 
-#ifndef PHASE_3
-#define PHASE_3
-#endif
-
 #include <usloss.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +29,6 @@ typedef struct P3_VmStats {
     int blocks;     /* Size of disk, in blocks (pages) */
     int freeFrames; /* # of frames that are not in-use */
     int freeBlocks; /* # of blocks that are not in-use */
-    int switches;   /* # of context switches */
     int faults;     /* # of page faults */
     int new;        /* # faults caused by previously unused pages*/
     int pageIns;    /* # faults that required reading page from disk */
@@ -43,11 +38,10 @@ typedef struct P3_VmStats {
 
 extern P3_VmStats P3_vmStats;
 
-extern int  P3_VmInit(int mappings, int pages, int frames, int pagers);
-extern void P3_VmDestroy(void);
-extern void P3_Fork(int pid);
-extern void P3_Switch(int old, int new);
-extern void P3_Quit(int pid);
+extern int          P3_VmInit(int mappings, int pages, int frames, int pagers);
+extern void         P3_VmDestroy(void);
+extern  USLOSS_PTE  *P3_AllocatePageTable(int pid);
+extern  void        P3_FreePageTable(int pid);
 
 extern int  P4_Startup(void *);
 

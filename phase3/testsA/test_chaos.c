@@ -1,7 +1,7 @@
 /*
  * chaos.c
  *  
- *  Stress test for Phase 3. Children run concurrently, reading
+ *  Stress test for Phase 3A. Children run concurrently, reading
  *  and writing pages at random.
  *
  */
@@ -17,10 +17,10 @@
 
 #define CHILDREN    4
 #define PAGES       4 // # of pages per child
-#define FRAMES      (CHILDREN * 2)
+#define FRAMES      (CHILDREN * PAGES) // no page faults in Part A.
 #define PRIORITY    3
 #define ITERATIONS  100
-#define PAGERS      2
+#define PAGERS      1  // Part A only requires 1 pager
 
 char    *fmt = "** Child %d, page %d";
 void    *vmRegion;
@@ -42,7 +42,7 @@ Time(void)
 {
     int tod;
 
-    Sys_GetTimeofDay(&tod);
+    Sys_GetTimeOfDay(&tod);
     return tod / 1000000.0;
 }
 
@@ -93,7 +93,8 @@ Child(void *arg)
             }
         } else {
             USLOSS_Console("%f: Child %d (%d) sleeping\n", Time(), id, pid);
-            Sys_Sleep(1);
+            int rc = Sys_Sleep(1);
+            assert(rc == 0);
         }
     }
     USLOSS_Console("%f: Child %d done\n", Time(), id);
@@ -132,20 +133,13 @@ P4_Startup(void *arg)
         rc = Sys_Wait(&pid, &child);
         assert(rc == 0);
     }
-    USLOSS_Console("P3_Startup done\n");
+    USLOSS_Console("Tests passed.\n");
     return 0;
 }
 
-void setup(void) {
-    // Create the swap disk.
-    int     rc;
-    int     tracks;
-    char    cmd[100];
-    tracks = (PAGES * CHILDREN * USLOSS_MmuPageSize() / USLOSS_DISK_SECTOR_SIZE / USLOSS_DISK_TRACK_SIZE) + 1;
-    snprintf(cmd, sizeof(cmd), "makedisk 1 %d", tracks);
-    rc = system(cmd);
-    assert(rc == 0);
+
+void test_setup(int argc, char **argv) {
 }
 
-void cleanup(void) {
+void test_cleanup(int argc, char **argv) {
 }

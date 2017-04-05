@@ -1,9 +1,11 @@
 /*
- * Zero.c
+ * basic.c
  *  
- *  Zero test case for Phase 3 milestone. It creates two processes, "A" and "B". 
+ *  Basic test case for Phase 3 Part A. It creates two processes, "A" and "B". 
  *  Each process has two pages and there are four frames so that all pages fit in memory.
- *  Each process verifies that its pages are zero-filled.
+ *  Each process writes its name into the first byte of each of its pages, sleeps for one
+ *  second (to give the other process time to run), then verifies that the first byte
+ *  of each page is correct. It then iterates a fixed number of times.
  *
  *  You can change the number of pages and iterations by changing the macros below. You
  *  can add more processes by adding more names to the "names" array, e.g. "C". The
@@ -24,11 +26,12 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-#define PAGES 2
+#define PAGES 1         // # of pages per process (be sure to try more than 1)
 #define ITERATIONS 10
+#define PAGERS 1       // Part A only requires 1 pager 
 
 static char *vmRegion;
-static char *names[] = {"A","B"};
+static char *names[] = {"A","B"};   // names of children, add more names to create more children
 static int  pageSize;
 
 #ifdef DEBUG
@@ -52,19 +55,40 @@ debug(char *fmt, ...)
 static int
 Child(void *arg)
 {
-    char    *name = (char *) arg;
-    int     i,j,k;
+    volatile char *name = (char *) arg;
+    int     i,j;
     char    *page;
+    int     rc;
+    int     pid;
+    int     first = 1;
 
-    USLOSS_Console("Child \"%s\" starting.\n", name);
+    Sys_GetPID(&pid);
+    USLOSS_Console("Child \"%s\" (%d) starting.\n", name, pid);
     for (i = 0; i < ITERATIONS; i++) {
-        for (j = 0; j < PAGES; j++) {
-            page = (char *) (vmRegion + j * pageSize);
-            for (k = 0; k < pageSize; k++) {
-                assert(page[k] == '\0');
+        if (first) {
+            // The first time a page is read it should be full of zeros.
+            for (j = 0; j < PAGES; j++) {
+                page = vmRegion + j * pageSize;
+                USLOSS_Console("Child \"%s\" reading zeros from page %d @ %p\n", name, j, page);
+                for (int k = 0; k < pageSize; k++) {
+                    assert(page[k] == '\0');
+                }
             }
+            first = 0;
+        } else {
+            for (j = 0; j < PAGES; j++) {
+                page = vmRegion + j * pageSize;
+                USLOSS_Console("Child \"%s\" writing to page %d @ %p\n", name, j, page);
+                *page = *name;
+            }
+            for (j = 0; j < PAGES; j++) {
+                page = vmRegion + j * pageSize;
+                USLOSS_Console("Child \"%s\" reading from page %d @ %p\n", name, j, page);
+                assert(*page == *name);
+            }
+            rc = Sys_Sleep(1);
+            assert(rc == 0);
         }
-        Sys_Sleep(1);
     }
     USLOSS_Console("Child \"%s\" done.\n", name);
     return 0;
@@ -96,12 +120,13 @@ P4_Startup(void *arg)
         assert(rc == 0);
     }
     Sys_VmDestroy();
-    USLOSS_Console("P4_Startup done.\n");
+    USLOSS_Console("Tests passed.\n");
     return 0;
 }
 
-void setup(void) {
+
+void test_setup(int argc, char **argv) {
 }
 
-void cleanup(void) {
+void test_cleanup(int argc, char **argv) {
 }

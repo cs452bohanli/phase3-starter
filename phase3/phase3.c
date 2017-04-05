@@ -10,32 +10,13 @@
 #include <phase3.h>
 #include <string.h>
 
-/*
- * Everybody uses the same tag.
- */
-#define TAG 0
-/*
- * Page table entry
- */
-
-#define UNUSED	0
-#define INCORE	1
-/* You'll probably want more states */
-
-/* Page Table Entry */
-typedef struct PTE {
-    int		state;		/* See above. */
-    int		frame;		/* The frame that stores the page. */
-    int		block;		/* The disk block that stores the page. */
-    /* Add more stuff here */
-} PTE;
 
 /*
  * Per-process information
  */
 typedef struct Process {
-    int		numPages;	/* Size of the page table. */
-    PTE		*pageTable;	/* The page table for the process. */
+    int		        numPages;	/* Size of the page table. */
+    USLOSS_PTE		*pageTable;	/* The page table for the process. */
     /* Add more stuff here if necessary. */
 } Process;
 
@@ -63,10 +44,7 @@ static void CheckPid(int);
 static void CheckMode(void);
 static void FaultHandler(int type, void *arg);
 
-void	P3_Fork(int pid);
-void	P3_Switch(int old, int new);
-void	P3_Quit(int pid);
-
+static int initialized = 0;
 
 
 /*
@@ -78,7 +56,7 @@ void	P3_Quit(int pid);
  *	up the page tables.
  *
  * Parameters:
- *      mappings: # of mappings MMU can hold
+ *      mappings: unused
  *      pages: # of pages in the VM region
  *      frames: # of frames of physical memory
  *      pagers: # of pager daemons
@@ -102,7 +80,7 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     int     result = 0;
 
     CheckMode();
-    status = USLOSS_MmuInit(mappings, pages, frames);
+    status = USLOSS_MmuInit(mappings, pages, frames, USLOSS_MMU_MODE_PAGETABLE);
     if (status == USLOSS_MMU_ERR_ON) {
         result = -2;
         goto done;
@@ -127,6 +105,7 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     P3_vmStats.frames = frames;
     numPages = pages;
     numFrames = frames;
+    initialized = 1;
 done:
     return result;
 }
@@ -148,27 +127,32 @@ done:
 void
 P3_VmDestroy(void)
 {
+    int rc;
+
     CheckMode();
-    USLOSS_MmuDone();
-    /*
-     * Kill the pagers here.
-     */
-    /* 
-     * Print vm statistics.
-     */
-    USLOSS_Console("P3_vmStats:\n");
-    USLOSS_Console("pages: %d\n", P3_vmStats.pages);
-    USLOSS_Console("frames: %d\n", P3_vmStats.frames);
-    USLOSS_Console("blocks: %d\n", P3_vmStats.blocks);
-    /* and so on... */
+    if (initialized) {
+        rc = USLOSS_MmuDone();
+        assert(rc == 0);
+        /*
+         * Kill the pagers here.
+         */
+        /* 
+         * Print vm statistics.
+         */
+        USLOSS_Console("P3_vmStats:\n");
+        USLOSS_Console("pages: %d\n", P3_vmStats.pages);
+        USLOSS_Console("frames: %d\n", P3_vmStats.frames);
+        USLOSS_Console("blocks: %d\n", P3_vmStats.blocks);
+        /* and so on... */
+    }
 }
 
 /*
  *----------------------------------------------------------------------
  *
- * P3_Fork --
+ * P3_AllocatePageTable --
  *
- *	Sets up a page table for the new process.
+ *	Allocates a page table for the new process.
  *
  * Parameters:
  *      pid : pid of new process
@@ -181,28 +165,35 @@ P3_VmDestroy(void)
  *
  *----------------------------------------------------------------------
  */
-void
-P3_Fork(int pid)
+USLOSS_PTE *
+P3_AllocatePageTable(int pid)
 {
-    int		i;
+    int		    i;
+    USLOSS_PTE  *pageTable = NULL;
 
     CheckMode();
     CheckPid(pid);
-    processes[pid].numPages = numPages;
-    processes[pid].pageTable = (PTE *) malloc(sizeof(PTE) * numPages);
-    for (i = 0; i < numPages; i++) {
-    	processes[pid].pageTable[i].frame = -1;
-    	processes[pid].pageTable[i].block = -1;
-    	processes[pid].pageTable[i].state = UNUSED;
+    if (initialized) {
+        processes[pid].numPages = numPages;
+        processes[pid].pageTable = (USLOSS_PTE *) malloc(sizeof(USLOSS_PTE) * numPages);
+        for (i = 0; i < numPages; i++) {
+            processes[pid].pageTable[i].incore = 0;
+            processes[pid].pageTable[i].read = 1; // all pages are readable
+            processes[pid].pageTable[i].write = 1; // and writeable
+
+            // Initialize more stuff here.
+        }
+        pageTable = processes[pid].pageTable;
     }
+    return pageTable;
 }
 
 /*
  *----------------------------------------------------------------------
  *
- * P3_Quit --
+ * P3_FreePageTable --
  *
- *	Called when a process quits and tears down the page table 
+ *	Called when a process quits and frees the page table 
  *	for the process and frees any frames and disk space used
  *  by the process.
  *
@@ -219,85 +210,25 @@ P3_Fork(int pid)
  *----------------------------------------------------------------------
  */
 void
-P3_Quit(int pid)
+P3_FreePageTable(int pid)
 {
     CheckMode();
     CheckPid(pid);
-    assert(processes[pid].numPages > 0);
-    assert(processes[pid].pageTable != NULL);
+    if ((initialized) && (processes[pid].pageTable != NULL)) {
 
-    /* 
-     * Free any of the process's pages that are on disk and free any page frames the
-     * process is using.
-     */
+        /* 
+         * Free any of the process's pages that are on disk and free any page frames the
+         * process is using.
+         */
 
-    /* Clean up the page table. */
+        /* Clean up the page table. */
 
-    free((char *) processes[pid].pageTable);
-    processes[pid].numPages = 0;
-    processes[pid].pageTable = NULL;
-}
-
-/*
- *----------------------------------------------------------------------
- *
- * P3_Switch
- *
- *	Called during a context switch. Unloads the mappings for the old
- *	process and loads the mappings for the new.
- *
- *
- * Parameters:
- *      old: pid of currently running process
- *      new: pid of next process to run
- *
- * Results:
- *	None.
- *
- * Side effects:
- *	The contents of the MMU are changed.
- *
- *----------------------------------------------------------------------
- */
-void
-P3_Switch(int old, int new)
-{
-    int		page;
-    int		status;
-
-    CheckMode();
-    CheckPid(old);
-    CheckPid(new);
-
-    P3_vmStats.switches++;
-    for (page = 0; page < processes[old].numPages; page++) {
-	/*
-	 * If a page of the old process is in memory then a mapping 
-	 * for it must be in the MMU. Remove it.
-	 */
-	if (processes[old].pageTable[page].state == INCORE) {
-	    assert(processes[old].pageTable[page].frame != -1);
-	    status = USLOSS_MmuUnmap(TAG, page);
-	    if (status != USLOSS_MMU_OK) {
-		  // report error and abort
-	    }
-	}
-    }
-    for (page = 0; page < processes[new].numPages; page++) {
-	/*
-	 * If a page of the new process is in memory then add a mapping 
-	 * for it to the MMU.
-	 */
-	if (processes[new].pageTable[page].state == INCORE) {
-	    assert(processes[new].pageTable[page].frame != -1);
-	    status = USLOSS_MmuMap(TAG, page, processes[new].pageTable[page].frame,
-			USLOSS_MMU_PROT_RW);
-	    if (status != USLOSS_MMU_OK) {
-		  // report error and abort
-	    }
-	}
+        free((char *) processes[pid].pageTable);
+        processes[pid].numPages = 0;
+        processes[pid].pageTable = NULL;
     }
 }
+
 
 /*
  *----------------------------------------------------------------------
@@ -367,15 +298,22 @@ FaultHandler(int type, void *arg)
 static int
 Pager(void *arg)
 {
+    int     status;
+    Fault   fault;
+    int     size;
     while(1) {
-    	/* Wait for fault to occur (receive from pagerMbox) */
+        size = sizeof(fault);
+        status = P2_MboxReceive(pagerMbox, &fault, &size);
+        assert(status >= 0);
+        assert(size == sizeof(fault));
+
     	/* Find a free frame */
     	/* If there isn't one run clock algorithm, write page to disk if necessary */
     	/* Load page into frame from disk or fill with zeros */
+        /* Update faulting process's page table to map page to frame */
     	/* Unblock waiting (faulting) process */
     }
-    /* Never gets here. */
-    return 1;
+    return 0;
 }
 
 /*
