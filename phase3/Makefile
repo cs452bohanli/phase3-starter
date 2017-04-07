@@ -22,7 +22,7 @@ endif
 PART = A
 
 # Set to Phase 3 version
-PHASE3_VERSION = 3.0
+PHASE3_VERSION = 3.1
 
 # Set to Phase 2 version
 PHASE2_VERSION = 2.6

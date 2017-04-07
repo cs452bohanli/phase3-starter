@@ -8,7 +8,6 @@
 #include <usyscall.h>
 #include <libuser.h>
 #include <assert.h>
-#include <mmu.h>
 #include <usloss.h>
 #include <stdlib.h>
 #include <phase3.h>
