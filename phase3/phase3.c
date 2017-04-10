@@ -119,28 +119,27 @@ P3_VmInit(int mappings, int pages, int frames, int pagers)
     	processes[i].pageTable = NULL;
     }
 
+    memset((char *) &P3_vmStats, 0, sizeof(P3_VmStats));
+    P3_vmStats.pages = pages;
+    P3_vmStats.frames = frames;
+    numPages = pages;
+    numFrames = frames;
+
     status = P1_SemCreate("running", 0, &running);
     assert(status == 0);
 
     pagerMbox = P2_MboxCreate(P1_MAXPROC, sizeof(Fault));
     assert(pagerMbox >= 0);
 
+    initialized = 1;
+    
     for (int i = 0; i < pagers; i++) {
         char name[30];
         snprintf(name, sizeof(name), "Pager %d\n", i);
         status = P1_Fork(name, Pager, (void *) i, STACKSIZE, 2, 0);
         assert(status >= 0);
     }
-    /*
-     * Create the page fault mailbox and fork the pagers here.
-     */
      
-    memset((char *) &P3_vmStats, 0, sizeof(P3_VmStats));
-    P3_vmStats.pages = pages;
-    P3_vmStats.frames = frames;
-    numPages = pages;
-    numFrames = frames;
-    initialized = 1;
 done:
     return result;
 }
@@ -168,6 +167,7 @@ P3_VmDestroy(void)
     if (initialized) {
         rc = USLOSS_MmuDone();
         assert(rc == 0);
+        initialized = 0;
         /*
          * Kill the pagers here.
          */
