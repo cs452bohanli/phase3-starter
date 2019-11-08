@@ -57,6 +57,11 @@ P3_VmInit(int unused, int pages, int frames, int pagers)
 
     CheckMode();
 
+    if (initialized) {
+        result = P3_ALREADY_INITIALIZED;
+        goto done;
+    }
+
     if ((pagers < 0) || (pagers > P3_MAX_PAGERS)) {
         result = P3_INVALID_NUM_PAGERS;
         goto done;
