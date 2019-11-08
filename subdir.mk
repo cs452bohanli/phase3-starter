@@ -140,7 +140,7 @@ $(TESTS):   %: $(TARGET) %.o $(STUBS)
 	$(LD) $(LDFLAGS) -o $@ $@.o $(STUBS) $(LIBFLAGS)
 
 clean:
-	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TDEPS) $(TVS) *.out tests/*.out tests/*.err
+	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TDEPS) $(TVS) *.out tests/*.out tests/*.err p3/*.o
 
 %.d: %.c
 	$(CC) -c $(CFLAGS) -MM -MF $@ $<
