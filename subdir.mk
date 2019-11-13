@@ -91,7 +91,7 @@ CC=gcc
 LD=gcc
 AR=ar    
 CFLAGS += $(INCLUDES) $(DEFINES)
-LDFLAGS = -L. -L$(PREFIX)/cs452/lib -L$(PREFIX)/lib 
+LDFLAGS += -L. -L$(PREFIX)/cs452/lib -L$(PREFIX)/lib 
 COBJS = ${SRCS:.c=.o}
 DEPS = ${COBJS:.o=.d}
 TSRCS = {$TESTS:=.c}
