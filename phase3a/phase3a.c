@@ -318,8 +318,12 @@ PageTableAllocateIdentity(int pages)
     // allocate and initialize table here
 	CheckMode();
 	if ((initialized)) {
-		for (int i = 0; i < pages; i++){
-			pageTables[i] = (void*) P3_vmStats.frames;
+		table = (USLOSS_PTE*) malloc(P1_MAXPROC*sizeof(pages));
+		for (int i = 0; i < pages; i++) {
+			table[i].frame = i;
+			table[i].incore = 1;
+			table[i].read = 1;
+			table[i].write = 1;
 		}
 	}
     return table;
@@ -329,14 +333,16 @@ static int
 PageTableFree(PID pid)
 {
     int result = P1_SUCCESS;
+	USLOSS_PTE *table = NULL;
+
     // free table here
 	CheckMode();
-    if ((pid < 0) || (pid >= P1_MAXPROC)) {
-        USLOSS_Console("P3_FreePageTable: invalid pid %d\n", pid);
-        return P1_INVALID_PID;
-    }
-	if ((initialized) && (pageTables[pid] != NULL)) {
-		P3_FreePageTable(pid);
+	result = P3PageTableGet(pid, &table);
+	if (result != P1_SUCCESS) return result;
+	else if (table == NULL) return P1_INVALID_PID;
+	if (initialized) {
+		free(table);
+		pageTables[pid] = NULL;
 	}
     return result;
 }
