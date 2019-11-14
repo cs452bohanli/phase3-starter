@@ -310,11 +310,18 @@ MMUShutdown(void)
     return P1_SUCCESS;
 }
 
+
 static USLOSS_PTE *
 PageTableAllocateIdentity(int pages)
 {
     USLOSS_PTE  *table = NULL;
     // allocate and initialize table here
+	CheckMode();
+	if ((initialized)) {
+		for (int i = 0; i < pages; i++){
+			pageTables[i] = (void*) P3_vmStats.frames;
+		}
+	}
     return table;
 }
 
@@ -323,6 +330,14 @@ PageTableFree(PID pid)
 {
     int result = P1_SUCCESS;
     // free table here
+	CheckMode();
+    if ((pid < 0) || (pid >= P1_MAXPROC)) {
+        USLOSS_Console("P3_FreePageTable: invalid pid %d\n", pid);
+        return P1_INVALID_PID;
+    }
+	if ((initialized) && (pageTables[pid] != NULL)) {
+		P3_FreePageTable(pid);
+	}
     return result;
 }
 
