@@ -12,17 +12,6 @@
 
 #include "phase3Int.h"
 
-// Phase 3b
-
-USLOSS_PTE *P3PageTableAllocateEmpty(int pages) {return NULL;}
-
-void
-P3PageFaultHandler(int type, void *arg)
-{
-    USLOSS_Console("PAGE FAULT!!! PID %d offset 0x%x\n", P1_GetPid(), (int) arg);
-    USLOSS_Halt(1);
-}
-
 // Phase 3c
 
 int P3FrameInit(int frames) {return P1_SUCCESS;}
