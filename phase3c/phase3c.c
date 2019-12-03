@@ -223,17 +223,18 @@ int
 P3FrameUnmap(int frame) 
 {
 	checkIfIsKernel();
+		USLOSS_Console("past here\n");
+
 	if (!frameInitialized) return P3_NOT_INITIALIZED;
 	if (frame < 0 || frame >= numFrames) return P3_INVALID_FRAME;
 	if (!frameTable[frame].used) return P3_FRAME_NOT_MAPPED;
 
-    int result = P1_SUCCESS;
-	
-    // get the page table for the process (P3PageTableGet)
+	int result = P1_SUCCESS;
+
+	// get the page table for the process (P3PageTableGet)
 	USLOSS_PTE *table;
     result = P3PageTableGet(P1_GetPid(), &table);
 	assert(table != NULL);
-
     // verify that the process mapped the frame
 	int i;
 	for (i = 0; i < numPages; i++) {
@@ -266,6 +267,12 @@ Fault queue[500];
 int queueStart;
 int queueEnd;
 
+int numPagers;
+
+// semaphores
+int *pagerIsRunning;
+int faultHappened;
+int faultWaits[500];
 /*
  *----------------------------------------------------------------------
  *
@@ -279,20 +286,20 @@ int queueEnd;
 static void
 FaultHandler(int type, void *arg)
 {
-    Fault fault;
-
-    fault.offset = (int) arg;
-    // fill in other fields in fault
+	  // fill in other fields in fault
     // add to queue of pending faults
-    // let pagers know there is a pending fault
+		int thisIndex = queueEnd;
+		queueEnd = (queueEnd + 1) % queueSize;
+    queue[thisIndex].offset = (int) arg;
+		queue[thisIndex].pid = P1_GetPid();
+		queue[thisIndex].cause = USLOSS_MmuGetCause();
+		// let pagers know there is a pending fault
+		V(faultHappened);
+		
     // wait for fault to be handled
+		P(queue[thisIndex].wait);
 }
 
-int numPagers;
-
-// semaphores
-int *pagerIsRunning;
-int faultHappened;
 /*
  *----------------------------------------------------------------------
  *
@@ -331,7 +338,12 @@ P3PagerInit(int pages, int frames, int pagers)
 	}
 	result = P1_SemCreate("fault", 0, &faultHappened);
 	assert(result == P1_SUCCESS);
-
+	for (int i = 0; i < queueSize; i++) {
+		char name[5];
+		sprintf(name, "%d*", i);
+		result = P1_SemCreate(name, 0, faultWaits + i);
+		assert(result == P1_SUCCESS);
+	}
     // fork off the pagers and wait for them to start running
 	for (int i = 0; i < numPagers; i++) {
 		char name[5];
@@ -342,7 +354,7 @@ P3PagerInit(int pages, int frames, int pagers)
 		P(pagerIsRunning[i]);
 	}
 	pageInitialized = TRUE;
-    return result;
+	return result;
 }
 
 int pagerShutdown = FALSE;
@@ -372,6 +384,7 @@ P3PagerShutdown(void)
 	for (int i = 0; i < numPagers; i++) assert(P1_SemFree(pagerIsRunning[i]) == P1_SUCCESS);
 	result = P1_SemFree(faultHappened);
 	assert(result == P1_SUCCESS);
+	for (int i = 0; i < queueSize; i++) assert(P1_SemFree(faultWaits[i]) == P1_SUCCESS);
     return result;
 }
 
@@ -423,19 +436,33 @@ Pager(void *arg)
 			if (!frameTable[frame].used) break;
 		}
 		if (frame == numFrames) assert(P3SwapOut(&frame) == P1_SUCCESS);
-		rc = P3SwapIn(fault.pid, fault.offset/USLOSS_MmuPageSize(), frame);
-		assert(rc == P1_SUCCESS);
+		int page = fault.offset/USLOSS_MmuPageSize();
+		rc = P3SwapIn(fault.pid, page, frame);
+		
 		void *addr;
 		if (rc == P3_EMPTY_PAGE) {
 			rc = P3FrameMap(frame, &addr);
 			assert(rc == P1_SUCCESS);
+			USLOSS_Console("inside here\n");
 			((USLOSS_PTE*) addr)->frame = 0;
+			USLOSS_Console("before unmap\n");
 			rc = P3FrameUnmap(frame);
 			assert(rc == P1_SUCCESS);
+			USLOSS_Console("made it out\n");
+
 		} else if (rc == P3_OUT_OF_SWAP) {
 			P2_Terminate(0);
 		}
-		
+		// get the page table for the process (P3PageTableGet)
+		USLOSS_PTE *table;
+    	rc = P3PageTableGet(fault.pid, &table);
+		assert(table != NULL);
+		frameTable[frame].used = TRUE;
+		table[page].incore = 1;
+		table[page].read = 1;
+		table[page].write = 1;
+		table[page].frame = frame;
+		V(fault.wait);
 	}
     return 0;
 }
