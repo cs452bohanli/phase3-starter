@@ -61,11 +61,12 @@ P3_VmInit(int unused, int pages, int frames, int pagers)
         result = P3_ALREADY_INITIALIZED;
         goto done;
     }
-
     if ((pagers < 0) || (pagers > P3_MAX_PAGERS)) {
         result = P3_INVALID_NUM_PAGERS;
         goto done;
     }
+
+    memset((char *) &P3_vmStats, 0, sizeof(P3_vmStats));
 
     for (int i = 0; i < P1_MAXPROC; i++) {
         pageTables[i] = NULL;
@@ -78,16 +79,16 @@ P3_VmInit(int unused, int pages, int frames, int pagers)
         USLOSS_Console("MMUInit failed: %d\n", result);
         goto done;
     }
+    numPages = pages;
+    numFrames = frames;
+    P3_vmStats.pages = pages;
+    P3_vmStats.frames = frames;
 
-    result = P3FrameInit(frames);
+    initialized = TRUE;
+
+    result = P3FrameInit(pages, frames);
     if (result != P1_SUCCESS) {
         USLOSS_Console("P3FrameInit failed: %d\n", result);
-        goto done;
-    }
-
-    result = P3PagerInit(pagers);
-    if (result != P1_SUCCESS) {
-        USLOSS_Console("P3PagerInit failed: %d\n", result);
         goto done;
     }
 
@@ -97,12 +98,12 @@ P3_VmInit(int unused, int pages, int frames, int pagers)
         goto done;
     }
 
-    numPages = pages;
-    numFrames = frames;
-    memset((char *) &P3_vmStats, 0, sizeof(P3_vmStats));
-    P3_vmStats.pages = pages;
-    P3_vmStats.frames = frames;
-    initialized = TRUE;
+    result = P3PagerInit(pages, frames, pagers);
+    if (result != P1_SUCCESS) {
+        USLOSS_Console("P3PagerInit failed: %d\n", result);
+        goto done;
+    }
+
     result = P1_SUCCESS;
 done:
     return result;
@@ -130,10 +131,10 @@ P3_VmShutdown(void)
     CheckMode();
     if (initialized) {
 
-        rc = P3SwapShutdown();
+        rc = P3PagerShutdown();
         assert(rc == P1_SUCCESS);
 
-        rc = P3PagerShutdown();
+        rc = P3SwapShutdown();
         assert(rc == P1_SUCCESS);
 
         rc = P3FrameShutdown();
@@ -150,8 +151,8 @@ P3_VmShutdown(void)
             }
         }
 
-        P3_PrintStats(&P3_vmStats);
         initialized = FALSE;      
+        P3_PrintStats(&P3_vmStats);
     }
 }
 
@@ -227,15 +228,15 @@ P3_FreePageTable(int pid)
     }
     if ((initialized) && (pageTables[pid] != NULL)) {
 
-        rc = P3FrameFreeAll(pid);
-        if (rc != P1_SUCCESS) {
-            USLOSS_Console("P3_FreePageTable: P3FrameFreeAll(%d) failed: %d\n", pid, rc);
-            goto done;
-        }
-
         rc = P3SwapFreeAll(pid);
         if (rc != P1_SUCCESS) {
             USLOSS_Console("P3_FreePageTable: P3SwapFreeAll(%d) failed: %d\n", pid, rc);
+            goto done;
+        }
+
+        rc = P3FrameFreeAll(pid);
+        if (rc != P1_SUCCESS) {
+            USLOSS_Console("P3_FreePageTable: P3FrameFreeAll(%d) failed: %d\n", pid, rc);
             goto done;
         }
 
