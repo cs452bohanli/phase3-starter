@@ -198,7 +198,7 @@ P3FrameMap(int frame, void **ptr)
 	table[i].write = 1;
 	frameTable[frame].used = TRUE;
 	frameTable[frame].page = table + i;
-
+	*ptr = table + i;
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
 	result = USLOSS_MmuSetPageTable(table);
 	assert(result == USLOSS_MMU_OK);
