@@ -19,6 +19,12 @@ int debugging3 = 1;
 int debugging3 = 0;
 #endif
 
+//**** 
+static int initialized = FALSE;
+
+//****
+
+
 void debug3(char *fmt, ...)
 {
     va_list ap;
@@ -53,7 +59,21 @@ P3FrameInit(int pages, int frames)
 
     // initialize the frame data structures, e.g. the pool of free frames
     // set P3_vmStats.freeFrames
-
+	
+	CheckMode();
+	if (initialized) {
+        result = P3_ALREADY_INITIALIZED;
+        goto done;
+    }
+	//result = P3FrameInit(frames);?
+	//result = MMUInit(ages, frames);? 
+	//result = USLOSS_MmuInit(int numMaps, int numPages, int numFrames)？
+	P3_vmStats.pages = pages;
+    P3_vmStats.frames = frames;
+	//P3_vmStats.freeFrames = ?
+    initialized = TRUE;
+    result = P1_SUCCESS;
+done:
     return result;
 }
 /*
@@ -75,7 +95,14 @@ P3FrameShutdown(void)
     int result = P1_SUCCESS;
 
     // clean things up
-
+	if (!initialized) {
+        result = P3_NOT_INITIALIZED;
+        goto done;
+    }
+	
+	
+	//initialized = FALSE;
+done:	
     return result;
 }
 
@@ -99,7 +126,14 @@ P3FrameFreeAll(int pid)
     int result = P1_SUCCESS;
 
     // free all frames in use by the process (P3PageTableGet)
-
+	if (!initialized) {
+        result = P3_NOT_INITIALIZED;
+        goto done;
+    }
+	
+	
+	//initialized = FALSE;
+done:	
     return result;
 }
 
@@ -128,6 +162,21 @@ P3FrameMap(int frame, void **ptr)
     // update the page's PTE to map the page to the frame
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
 
+	CheckMode();
+	if (!initialized) {
+        result = P3_NOT_INITIALIZED;
+        goto done;
+    }
+	// where to use ptr? ptr == table?
+	USLOSS_PTE *table;
+	result = P3PageTableGet(P1_GetPid(), &table);
+	int page = 0;// need to find a free page
+	table[page].incore = table[page].read = table[page].write = 1;
+	table[page].frame = page;
+	assert(USLOSS_MmuSetPageTable(table) == USLOSS_MMU_OK);
+	
+
+done:
     return result;
 }
 /*
@@ -155,6 +204,14 @@ P3FrameUnmap(int frame)
     // update page's PTE to remove the mapping
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
 
+	CheckMode();
+	if (!initialized) {
+        result = P3_NOT_INITIALIZED;
+        goto done;
+    }
+	
+	
+done:
     return result;
 }
 
@@ -219,6 +276,12 @@ P3PagerInit(int pages, int frames, int pagers)
 
     // initialize the pager data structures
     // fork off the pagers and wait for them to start running
+	CheckMode();
+	if (initialized) {
+        return P3_ALREADY_INITIALIZED;
+        
+    }
+	
 
     return result;
 }
@@ -243,6 +306,15 @@ P3PagerShutdown(void)
 
     // cause the pagers to quit
     // clean up the pager data structures
+
+	CheckMode();
+	if (!initialized) {
+        return P3_NOT_INITIALIZED;
+        
+    }
+	
+	
+	
 
     return result;
 }
