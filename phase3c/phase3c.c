@@ -29,9 +29,16 @@ void debug3(char *fmt, ...)
     }
 }
 
-// This allows the skeleton code to compile. Remove it in your solution.
-
-#define UNUSED __attribute__((unused))
+/*
+ * Checks psr to make sure OS is in kernel mode, halting USLOSS if not. Mode bit
+ * is the LSB.
+ */
+void checkIfIsKernel(){ 
+    if ((USLOSS_PsrGet() & 1) != 1) {
+        USLOSS_Console("The OS must be in kernel mode!\n");
+        USLOSS_IllegalInstruction();
+    }
+}
 
 /*
  *----------------------------------------------------------------------
@@ -49,11 +56,12 @@ void debug3(char *fmt, ...)
 int
 P3FrameInit(int pages, int frames)
 {
+	checkIfIsKernel();
     int result = P1_SUCCESS;
 
     // initialize the frame data structures, e.g. the pool of free frames
     // set P3_vmStats.freeFrames
-
+	
     return result;
 }
 /*
@@ -72,6 +80,7 @@ P3FrameInit(int pages, int frames)
 int
 P3FrameShutdown(void)
 {
+	checkIfIsKernel();
     int result = P1_SUCCESS;
 
     // clean things up
@@ -96,6 +105,7 @@ P3FrameShutdown(void)
 int
 P3FrameFreeAll(int pid)
 {
+	checkIfIsKernel();
     int result = P1_SUCCESS;
 
     // free all frames in use by the process (P3PageTableGet)
@@ -121,6 +131,7 @@ P3FrameFreeAll(int pid)
 int
 P3FrameMap(int frame, void **ptr) 
 {
+	checkIfIsKernel();
     int result = P1_SUCCESS;
 
     // get the page table for the process (P3PageTableGet)
@@ -148,6 +159,7 @@ P3FrameMap(int frame, void **ptr)
 int
 P3FrameUnmap(int frame) 
 {
+	checkIfIsKernel();
     int result = P1_SUCCESS;
 
     // get the process's page table (P3PageTableGet)
@@ -182,7 +194,7 @@ typedef struct Fault {
 static void
 FaultHandler(int type, void *arg)
 {
-    Fault   fault UNUSED;
+    Fault fault;
 
     fault.offset = (int) arg;
     // fill in other fields in fault
@@ -213,6 +225,7 @@ FaultHandler(int type, void *arg)
 int
 P3PagerInit(int pages, int frames, int pagers)
 {
+	checkIfIsKernel();
     int     result = P1_SUCCESS;
 
     USLOSS_IntVec[USLOSS_MMU_INT] = FaultHandler;
@@ -239,6 +252,7 @@ P3PagerInit(int pages, int frames, int pagers)
 int
 P3PagerShutdown(void)
 {
+	checkIfIsKernel();
     int result = P1_SUCCESS;
 
     // cause the pagers to quit
