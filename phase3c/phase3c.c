@@ -274,6 +274,7 @@ int numPagers;
 int *pagerIsRunning;
 int faultHappened;
 int faultWaits[500];
+int mutex;
 /*
  *----------------------------------------------------------------------
  *
@@ -289,9 +290,11 @@ FaultHandler(int type, void *arg)
 {
 	  // fill in other fields in fault
     // add to queue of pending faults
+		P(mutex);
 		int thisIndex = queueEnd;
 		queueEnd = (queueEnd + 1) % queueSize;
-    queue[thisIndex].offset = (int) arg;
+    V(mutex);
+		queue[thisIndex].offset = (int) arg;
 		queue[thisIndex].pid = P1_GetPid();
 		queue[thisIndex].cause = USLOSS_MmuGetCause();
 		// let pagers know there is a pending fault
@@ -338,6 +341,8 @@ P3PagerInit(int pages, int frames, int pagers)
 		assert(result == P1_SUCCESS);
 	}
 	result = P1_SemCreate("fault", 0, &faultHappened);
+	assert(result == P1_SUCCESS);
+	result = P1_SemCreate("mutex", 1, &mutex);
 	assert(result == P1_SUCCESS);
 	for (int i = 0; i < queueSize; i++) {
 		char name[5];
@@ -386,6 +391,8 @@ P3PagerShutdown(void)
 	for (int i = 0; i < numPagers; i++) V(faultHappened);
 	result = P1_SemFree(faultHappened);
 	assert(result == P1_SUCCESS);
+	result = P1_SemFree(mutex);
+	assert(result == P1_SUCCESS);
 	for (int i = 0; i < queueSize; i++) assert(P1_SemFree(faultWaits[i]) == P1_SUCCESS);
     return result;
 }
@@ -429,8 +436,10 @@ Pager(void *arg)
 	while (!pagerShutdown) {
 		P(faultHappened);
 		if (pagerShutdown) break;
+		P(mutex);
 		Fault fault = queue[queueStart];
 		queueStart = (queueStart + 1) % queueSize;
+		V(mutex);
 		if (fault.cause == USLOSS_MMU_ACCESS) {
 			P2_Terminate(0);
 		}
@@ -454,7 +463,6 @@ Pager(void *arg)
 
 		} else if (rc == P3_OUT_OF_SWAP) {
 			P2_Terminate(0);
-			continue;
 		}
 		// get the page table for the process (P3PageTableGet)
 		USLOSS_PTE *table;
