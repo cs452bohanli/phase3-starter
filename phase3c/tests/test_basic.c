@@ -68,6 +68,7 @@ Child(void *arg)
     Sys_GetPID(&pid);
     Debug("Child \"%s\" (%d) starting.\n", name, pid);
 
+		/*
     // The first time a page is read it should be full of zeros.
     for (j = 0; j < PAGES; j++) {
         page = vmRegion + j * pageSize;
@@ -75,7 +76,7 @@ Child(void *arg)
         for (int k = 0; k < pageSize; k++) {
             TEST(page[k], '\0');
         }
-    }    
+    }*/
     for (i = 0; i < ITERATIONS; i++) {
         for (j = 0; j < PAGES; j++) {
             rc = Sys_Sleep(1);

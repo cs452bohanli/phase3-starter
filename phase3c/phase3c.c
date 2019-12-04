@@ -199,7 +199,8 @@ P3FrameMap(int frame, void **ptr)
 	table[i].frame = frame;
 	frameTable[frame].used = TRUE;
 	frameTable[frame].page = table + i;
-	*ptr = table + i;
+	int np;
+	*ptr = USLOSS_MmuRegion(&np);
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
 	result = USLOSS_MmuSetPageTable(table);
 	assert(result == USLOSS_MMU_OK);
@@ -326,7 +327,7 @@ P3PagerInit(int pages, int frames, int pagers)
 
     USLOSS_IntVec[USLOSS_MMU_INT] = FaultHandler;
 	
-	if (pagers <= 0) return P3_INVALID_NUM_PAGERS;
+	if (pagers <= 0 || pagers > P3_MAX_PAGERS) return P3_INVALID_NUM_PAGERS;
 
     // initialize the pager data structures
 	numPagers = pagers;
@@ -385,7 +386,9 @@ P3PagerShutdown(void)
 	pagerShutdown = TRUE;
     // clean up the pager data structures
 	for (int i = 0; i < numPagers; i++) assert(P1_SemFree(pagerIsRunning[i]) == P1_SUCCESS);
+	for (int i = 0; i < numPagers; i++) V(faultHappened);
 	result = P1_SemFree(faultHappened);
+	USLOSS_Console("semfree rc %d\n");
 	assert(result == P1_SUCCESS);
 	for (int i = 0; i < queueSize; i++) assert(P1_SemFree(faultWaits[i]) == P1_SUCCESS);
     return result;
@@ -429,6 +432,7 @@ Pager(void *arg)
 	int rc;
 	while (!pagerShutdown) {
 		P(faultHappened);
+		if (pagerShutdown) break;
 		Fault fault = queue[queueStart];
 		queueStart = (queueStart + 1) % queueSize;
 		if (fault.cause == USLOSS_MMU_ACCESS) {
@@ -446,6 +450,7 @@ Pager(void *arg)
 		if (rc == P3_EMPTY_PAGE) {
 			rc = P3FrameMap(frame, &addr);
 			assert(rc == P1_SUCCESS);
+			*((char*)addr) = 0;
 			rc = P3FrameUnmap(frame);
 			USLOSS_Console("%d\n", rc);
 			assert(rc == P1_SUCCESS);
