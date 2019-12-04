@@ -196,12 +196,14 @@ P3FrameMap(int frame, void **ptr)
 	table[i].incore = 1;
 	table[i].read = 1;
 	table[i].write = 1;
+	table[i].frame = frame;
 	frameTable[frame].used = TRUE;
 	frameTable[frame].page = table + i;
 	*ptr = table + i;
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
 	result = USLOSS_MmuSetPageTable(table);
 	assert(result == USLOSS_MMU_OK);
+	USLOSS_Console("frame %d\n", frame);
     return P1_SUCCESS;
 }
 /*
@@ -240,6 +242,7 @@ P3FrameUnmap(int frame)
 	for (i = 0; i < numPages; i++) {
 		if (table[i].incore && table[i].frame == frame) break;
 	}
+	USLOSS_Console("right before this check %d\n", frame);
 	if (i == numPages) return P3_FRAME_NOT_MAPPED;
 
     // update page's PTE to remove the mapping
@@ -443,12 +446,9 @@ Pager(void *arg)
 		if (rc == P3_EMPTY_PAGE) {
 			rc = P3FrameMap(frame, &addr);
 			assert(rc == P1_SUCCESS);
-			USLOSS_Console("inside here\n");
-			((USLOSS_PTE*) addr)->frame = 0;
-			USLOSS_Console("before unmap\n");
 			rc = P3FrameUnmap(frame);
+			USLOSS_Console("%d\n", rc);
 			assert(rc == P1_SUCCESS);
-			USLOSS_Console("made it out\n");
 
 		} else if (rc == P3_OUT_OF_SWAP) {
 			P2_Terminate(0);
