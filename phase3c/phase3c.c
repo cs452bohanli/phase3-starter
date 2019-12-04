@@ -261,6 +261,8 @@ typedef struct Fault {
     int         cause;
     SID         wait;
     // other stuff goes here
+	int			terminate;
+	int			status;
 } Fault;
 
 int queueSize = 500;
@@ -299,9 +301,10 @@ FaultHandler(int type, void *arg)
 		queue[thisIndex].cause = USLOSS_MmuGetCause();
 		// let pagers know there is a pending fault
 		V(faultHappened);
-		
+
     // wait for fault to be handled
 		P(queue[thisIndex].wait);
+		if (queue[thisIndex].terminate) P2_Terminate(queue[thisIndex].status);
 }
 
 /*
@@ -438,10 +441,15 @@ Pager(void *arg)
 		if (pagerShutdown) break;
 		P(mutex);
 		Fault fault = queue[queueStart];
+		int index = queueStart;
 		queueStart = (queueStart + 1) % queueSize;
+		queue[index].terminate = FALSE;
 		V(mutex);
 		if (fault.cause == USLOSS_MMU_ACCESS) {
-			P2_Terminate(0);
+			queue[index].terminate = TRUE;
+			queue[index].status = 0;
+			V(fault.wait);
+			continue;
 		}
 		int frame;
 		for (frame = 0; frame < numFrames; frame++) {
@@ -462,7 +470,10 @@ Pager(void *arg)
 			assert(rc == P1_SUCCESS);
 
 		} else if (rc == P3_OUT_OF_SWAP) {
-			P2_Terminate(0);
+			queue[index].terminate = TRUE;
+			queue[index].status = P3_OUT_OF_SWAP;
+			V(fault.wait);
+			continue;
 		}
 		// get the page table for the process (P3PageTableGet)
 		USLOSS_PTE *table;
