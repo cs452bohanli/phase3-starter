@@ -187,10 +187,10 @@ P3FrameMap(int frame, void **ptr)
 
 	// find an unused page
 	int i;
-	for (i = 0; i < numFrames; i++) {
+	for (i = 0; i < numPages; i++) {
 		if (!table[i].incore) break;
 	}
-	if (i == numFrames) return P3_OUT_OF_PAGES;
+	if (i == numPages) return P3_OUT_OF_PAGES;
 
     // update the page's PTE to map the page to the frame
 	table[i].incore = 1;
@@ -200,11 +200,10 @@ P3FrameMap(int frame, void **ptr)
 	frameTable[frame].used = TRUE;
 	frameTable[frame].page = table + i;
 	int np;
-	*ptr = USLOSS_MmuRegion(&np);
+	*ptr = USLOSS_MmuRegion(&np) + i*USLOSS_MmuPageSize();
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
 	result = USLOSS_MmuSetPageTable(table);
 	assert(result == USLOSS_MMU_OK);
-	USLOSS_Console("frame %d\n", frame);
     return P1_SUCCESS;
 }
 /*
@@ -226,7 +225,6 @@ int
 P3FrameUnmap(int frame) 
 {
 	checkIfIsKernel();
-		USLOSS_Console("past here\n");
 
 	if (!frameInitialized) return P3_NOT_INITIALIZED;
 	if (frame < 0 || frame >= numFrames) return P3_INVALID_FRAME;
@@ -243,7 +241,6 @@ P3FrameUnmap(int frame)
 	for (i = 0; i < numPages; i++) {
 		if (table[i].incore && table[i].frame == frame) break;
 	}
-	USLOSS_Console("right before this check %d\n", frame);
 	if (i == numPages) return P3_FRAME_NOT_MAPPED;
 
     // update page's PTE to remove the mapping
@@ -388,7 +385,6 @@ P3PagerShutdown(void)
 	for (int i = 0; i < numPagers; i++) assert(P1_SemFree(pagerIsRunning[i]) == P1_SUCCESS);
 	for (int i = 0; i < numPagers; i++) V(faultHappened);
 	result = P1_SemFree(faultHappened);
-	USLOSS_Console("semfree rc %d\n");
 	assert(result == P1_SUCCESS);
 	for (int i = 0; i < queueSize; i++) assert(P1_SemFree(faultWaits[i]) == P1_SUCCESS);
     return result;
@@ -450,13 +446,15 @@ Pager(void *arg)
 		if (rc == P3_EMPTY_PAGE) {
 			rc = P3FrameMap(frame, &addr);
 			assert(rc == P1_SUCCESS);
-			*((char*)addr) = 0;
+			for (int i = 0; i < USLOSS_MmuPageSize(); i++) {
+					*((char*)addr + i) = 0;
+			}
 			rc = P3FrameUnmap(frame);
-			USLOSS_Console("%d\n", rc);
 			assert(rc == P1_SUCCESS);
 
 		} else if (rc == P3_OUT_OF_SWAP) {
 			P2_Terminate(0);
+			continue;
 		}
 		// get the page table for the process (P3PageTableGet)
 		USLOSS_PTE *table;
