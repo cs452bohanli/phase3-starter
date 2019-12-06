@@ -192,6 +192,7 @@ P3SwapOut(int *frame)
  *   P1_INVALID_PID:         pid is invalid      
  *   P1_INVALID_PAGE:        page is invalid         
  *   P1_INVALID_FRAME:       frame is invalid
+ *   P3_EMPTY_PAGE:          page is not in swap
  *   P1_OUT_OF_SWAP:         there is no more swap space
  *   P1_SUCCESS:             success
  *
