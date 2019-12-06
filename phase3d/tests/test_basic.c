@@ -24,6 +24,7 @@
 #include <phase3.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <libdisk.h>
 
 #include "tester.h"
 #include "phase3Int.h"
@@ -35,6 +36,7 @@
 
 static char *vmRegion;
 static char *names[] = {"A","B"};   // names of children, add more names to create more children
+static int  numChildren = sizeof(names) / sizeof(char *);
 static int  pageSize;
 
 static int passed = FALSE;
@@ -72,7 +74,7 @@ Child(void *arg)
     // The first time a page is read it should be full of zeros.
     for (j = 0; j < PAGES; j++) {
         page = vmRegion + j * pageSize;
-        Debug("Child \"%s\" reading zeros from page %d @ %p\n", name, j, page);
+        Debug("Child \"%s\" (%d) reading zeros from page %d @ %p\n", name, pid, j, page);
         for (int k = 0; k < pageSize; k++) {
             TEST(page[k], '\0');
         }
@@ -82,7 +84,7 @@ Child(void *arg)
             rc = Sys_Sleep(1);
             assert(rc == P1_SUCCESS);
             page = vmRegion + j * pageSize;
-            Debug("Child \"%s\" writing to page %d @ %p\n", name, j, page);
+            Debug("Child \"%s\" (%d) writing to page %d @ %p\n", name, pid, j, page);
             for (int k = 0; k < pageSize; k++) {
                 page[k] = *name;
             }
@@ -91,13 +93,13 @@ Child(void *arg)
             rc = Sys_Sleep(1);
             assert(rc == P1_SUCCESS);
             page = vmRegion + j * pageSize;
-            Debug("Child \"%s\" reading from page %d @ %p\n", name, j, page);
+            Debug("Child \"%s\" (%d) reading from page %d @ %p\n", name, pid, j, page);
             for (int k = 0; k < pageSize; k++) {
                 TEST(page[k], *name);
             }
         }
     }
-    Debug("Child \"%s\" done.\n", name);
+    Debug("Child \"%s\" (%d) done.\n", name, pid);
     return 0;
 }
 
@@ -109,7 +111,6 @@ P4_Startup(void *arg)
     int     rc;
     int     pid;
     int     status;
-    int     numChildren = sizeof(names) / sizeof(char *);
 
     Debug("P4_Startup starting.\n");
     rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion);
@@ -134,9 +135,13 @@ P4_Startup(void *arg)
 
 
 void test_setup(int argc, char **argv) {
+    DeleteAllDisks();
+    int rc = Disk_Create(NULL, P3_SWAP_DISK, numChildren * PAGES);
+    assert(rc == 0);    
 }
 
 void test_cleanup(int argc, char **argv) {
+    DeleteAllDisks();
     if (passed) {
         USLOSS_Console("TEST PASSED.\n");
     }
