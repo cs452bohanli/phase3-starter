@@ -56,6 +56,7 @@ extern P3_VmStats P3_vmStats;
 #define P3_NOT_INITIALIZED          -38
 #define P3_OUT_OF_PAGES             -39
 #define P3_INVALID_FRAME            -40
+#define P3_INVALID_PAGE             -41
 
 #ifndef CHECKRETURN
 #define CHECKRETURN __attribute__((warn_unused_result))
