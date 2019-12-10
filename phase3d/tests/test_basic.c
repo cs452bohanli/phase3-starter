@@ -29,8 +29,8 @@
 #include "tester.h"
 #include "phase3Int.h"
 
-#define PAGES 4         // # of pages per process (be sure to try different values)
-#define FRAMES ((PAGES) - 1)
+#define PAGES 7        // # of pages per process (be sure to try different values)
+#define FRAMES ((PAGES) - 3)
 #define ITERATIONS 10
 #define PAGERS 2        // # of pagers
 

@@ -71,7 +71,7 @@ LIBS += -l$(PHASE)-$(VERSION)
 
 # Change this if you want change which flags are passed to the C compiler.
 CFLAGS += -Wall -g -std=gnu99 -Werror -DPHASE=$(PHASE_UPPER) -DVERSION=$(VERSION) -DDATE="`date`"
-CFLAGS += -DDEBUG
+#CFLAGS += -DDEBUG
 
 # You shouldn't need to change anything below here. 
 
