@@ -78,6 +78,8 @@ void V(int sid) {
 
 typedef struct f {
 	int busy;
+	int pid;
+	int page;
 	int track, sector, onDisk; // disk properties
 } Frame;
 
@@ -116,6 +118,7 @@ P3SwapInit(int pages, int frames)
 		for (int i = 0; i < numFrames; i++) {
 			allFrames[i].busy = FALSE;
 			allFrames[i].onDisk = FALSE;
+			allFrames[i].pid = -1;
 		}
 		result = P1_SemCreate("mutex", 1, &mutex);
 		assert(result == P1_SUCCESS);
@@ -193,6 +196,9 @@ P3SwapFreeAll(int pid)
 						pagesOnDisk[j].pid = -1;
 						pagesOnDisk[j].page = -1;
 					}
+				}
+				for (int j = 0; j < numFrames; j++) {
+					if (allFrames[j].pid == pid) allFrames[j].pid = -1;
 				}
 			}
 		}
@@ -280,7 +286,7 @@ P3SwapOut(int *frame)
 		int track = USLOSS_MmuPageSize()*i/(sectorsInTrack*sectorSize);
 		int first = (USLOSS_MmuPageSize()*i - track*sectorsInTrack*sectorSize)/sectorSize;
 		int sectors = USLOSS_MmuPageSize()/sectorSize;
-		USLOSS_Console("attempting write %x track %d first %d sectors %d\n", page, track, first, sectors);
+		//USLOSS_Console("attempting write %x track %d first %d sectors %d\n", page, track, first, sectors);
 		char *tmpBuffer = (char*) malloc(USLOSS_MmuPageSize()*sizeof(char));
 		for (int i = 0; i < USLOSS_MmuPageSize(); i++) tmpBuffer[i] = ((char*) page)[i];
 		result = P2_DiskWrite(P3_SWAP_DISK, track, first, sectors, tmpBuffer);
@@ -291,7 +297,7 @@ P3SwapOut(int *frame)
 			return P3_OUT_OF_SWAP;
 		}
 		writeIndex = i;
-		USLOSS_Console("written %d\n", writeIndex);
+		//USLOSS_Console("written %d\n", writeIndex);
 
 		result = P3FrameUnmap(*frame);
 		assert(result == P1_SUCCESS);
@@ -299,17 +305,17 @@ P3SwapOut(int *frame)
 		assert(result == USLOSS_MMU_OK);
 	}
 	USLOSS_PTE *table;
-	USLOSS_Console("pid %d\n", P1_GetPid());
-	result = P3PageTableGet(P1_GetPid(), &table);
+	int pid = allFrames[*frame].pid;
+	result = P3PageTableGet(pid, &table);
 	assert(result == P1_SUCCESS);
 	if (table) {
 		for (int i = 0; i < numPages; i++) {
-			USLOSS_Console("%d %d\n", table[i].incore, table[i].frame);
+			//USLOSS_Console("%d %d\n", table[i].incore, table[i].frame);
 			if (table[i].incore && table[i].frame == *frame) {
 				table[i].incore = 0;
 				if (writeIndex != -1) {
-					USLOSS_Console("INSIDE HERE\n");
-					pagesOnDisk[writeIndex].pid = P1_GetPid();
+					//USLOSS_Console("INSIDE HERE\n");
+					pagesOnDisk[writeIndex].pid = pid;
 					pagesOnDisk[writeIndex].page = i;
 				}
 				break;
@@ -317,7 +323,7 @@ P3SwapOut(int *frame)
 		}
 	}
 
-	USLOSS_Console("frame chosen %d\n", *frame);
+	//USLOSS_Console("frame chosen %d\n", *frame);
 	allFrames[*frame].busy = TRUE;
 	V(mutex);
     return result;
@@ -367,7 +373,7 @@ P3SwapIn(int pid, int page, int frame)
 	P(mutex);
 	int isSpace = FALSE, diskIndex = -1;
 	for (int i = 0; i < maxFramesOnDisk; i++) {
-		USLOSS_Console("status %d\n", pagesOnDisk[i].page);
+		//USLOSS_Console("pid %d page %d\n", pagesOnDisk[i].pid, pagesOnDisk[i].page);
 		if (pagesOnDisk[i].pid == pid && pagesOnDisk[i].page == page) diskIndex = i;
 		else if (pagesOnDisk[i].pid == -1) isSpace = TRUE;
 	}
@@ -380,16 +386,17 @@ P3SwapIn(int pid, int page, int frame)
 		int first = (USLOSS_MmuPageSize()*diskIndex - track*sectorsInTrack*sectorSize)/sectorSize;
 		int sectors = USLOSS_MmuPageSize()/sectorSize;
 		char *tmpBuffer = (char*) malloc(USLOSS_MmuPageSize()*sizeof(char));
-		for (int i = 0; i < USLOSS_MmuPageSize(); i++) tmpBuffer[i] = ((char*) addr)[i];
-		USLOSS_Console("addr %x contents %d %d\n", addr, *((char*) addr), *((char*) (addr+1)));
+		
 		result = P2_DiskRead(P3_SWAP_DISK, track, first, sectors, tmpBuffer);
-		free(tmpBuffer);
 		if (result != P1_SUCCESS) {
 			USLOSS_Console("read failed %d\n", result);
 			USLOSS_Console("track %d first %d sectors %d page %d\n", track, first, sectors, page);
 			V(mutex);
 			return P3_OUT_OF_SWAP;
 		}
+		for (int i = 0; i < USLOSS_MmuPageSize(); i++) ((char*) addr)[i] = tmpBuffer[i];
+		free(tmpBuffer);
+
 		result = P3FrameUnmap(frame);
 		assert(result == P1_SUCCESS);
 	} else {
@@ -397,6 +404,8 @@ P3SwapIn(int pid, int page, int frame)
 		else result = P3_EMPTY_PAGE;
 	}
 	allFrames[frame].busy = FALSE;
+	allFrames[frame].pid = pid;
+	allFrames[frame].page = page;
 	V(mutex);
     return result;
 }
