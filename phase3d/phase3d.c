@@ -55,6 +55,40 @@ static void debug3(char *fmt, ...)
     }
 }
 
+int initialized = FALSE;
+int numPages;
+int numFrames;
+
+// disk data
+int sectorSize; // bytes
+int sectorsInTrack;
+int tracksInDisk;
+
+// semaphores
+int mutex;
+
+// helper functions for semaphores, makes code cleaner
+void P(int sid) {
+	assert(P1_P(sid) == P1_SUCCESS);
+}
+
+void V(int sid) {
+	assert(P1_V(sid) == P1_SUCCESS);
+}
+
+typedef struct f {
+	int busy;
+	int track, sector, onDisk; // disk properties
+} Frame;
+
+Frame *allFrames;
+int maxFramesOnDisk;
+
+typedef struct p {
+	int pid, page;
+} DiskPage;
+DiskPage *pagesOnDisk;
+
 /*
  *----------------------------------------------------------------------
  *
@@ -72,9 +106,24 @@ int
 P3SwapInit(int pages, int frames)
 {
     int result = P1_SUCCESS;
-
+		if (initialized) return P3_ALREADY_INITIALIZED;
     // initialize the swap data structures, e.g. the pool of free blocks
-
+		numPages = pages;
+		numFrames = frames;
+		initialized = TRUE;
+		assert(P2_DiskSize(P3_SWAP_DISK, &sectorSize, &sectorsInTrack, &tracksInDisk) == P1_SUCCESS);
+		allFrames = (Frame*) malloc(numFrames*sizeof(Frame));
+		for (int i = 0; i < numFrames; i++) {
+			allFrames[i].busy = FALSE;
+			allFrames[i].onDisk = FALSE;
+		}
+		result = P1_SemCreate("mutex", 1, &mutex);
+		assert(result == P1_SUCCESS);
+	maxFramesOnDisk = tracksInDisk*sectorsInTrack*sectorSize/USLOSS_MmuPageSize();
+	pagesOnDisk = (DiskPage*) malloc(maxFramesOnDisk*sizeof(DiskPage));
+	for (int i = 0; i < maxFramesOnDisk; i++) {
+		pagesOnDisk[i].pid = -1;
+	}
     return result;
 }
 /*
@@ -94,9 +143,12 @@ int
 P3SwapShutdown(void)
 {
     int result = P1_SUCCESS;
-
+		if (!initialized) return P3_NOT_INITIALIZED;
     // clean things up
-
+		free(allFrames);
+		result = P1_SemFree(mutex);
+		assert(result == P1_SUCCESS);
+	free(pagesOnDisk);
     return result;
 }
 
@@ -118,6 +170,7 @@ int
 P3SwapFreeAll(int pid)
 {
     int result = P1_SUCCESS;
+		if (!initialized) return P3_NOT_INITIALIZED;
 
     /*****************
 
@@ -126,8 +179,22 @@ P3SwapFreeAll(int pid)
     V(mutex)
 
     *****************/
-
-
+	P(mutex);
+	USLOSS_PTE *table;
+	result = P3PageTableGet(pid, &table);
+	if (table) {
+		for (int i = 0; i < numPages; i++) {
+			if (table[i].incore) {
+				table[i].incore = 0;
+				allFrames[table[i].frame].busy = FALSE;
+				for (int j = 0; j < maxFramesOnDisk; j++) {
+					if (pagesOnDisk[j].pid == pid && pagesOnDisk[j].page == i) pagesOnDisk[j].pid = -1;
+				}
+			}
+		}
+		result = P3PageTableSet(pid, table);
+	}
+	V(mutex);
     return result;
 }
 
@@ -150,6 +217,7 @@ int
 P3SwapOut(int *frame) 
 {
     int result = P1_SUCCESS;
+		if (!initialized) return P3_NOT_INITIALIZED;
 
     /*****************
 
@@ -177,7 +245,70 @@ P3SwapOut(int *frame)
     *frame = target
 
     *****************/
-
+	static int hand = -1;
+	int accessed;
+	int writeIndex = -1;
+	P(mutex);
+	while (1) {
+		hand = (hand + 1) % numFrames;
+		if (!allFrames[hand].busy) {
+			result = USLOSS_MmuGetAccess(hand, &accessed);
+			assert(result == USLOSS_MMU_OK);
+			if (!accessed) {
+				*frame = hand;
+				break;
+			}
+			else {
+				result = USLOSS_MmuSetAccess(hand, 0);
+				assert(result == USLOSS_MMU_OK);
+			}
+		}
+	}
+	result = USLOSS_MmuGetAccess(*frame, &accessed);
+	assert(result == USLOSS_MMU_OK);
+	if (accessed) {
+		void *page;
+		result = P3FrameMap(*frame, &page);
+		assert(result == P1_SUCCESS);
+		int i;
+		for (i = 0; i < maxFramesOnDisk; i++) {
+			if (pagesOnDisk[i].pid == -1) break;
+		}
+		if (i == maxFramesOnDisk) return P3_OUT_OF_SWAP;
+		int track = USLOSS_MmuPageSize()*i/(sectorsInTrack*sectorSize);
+		int first = (USLOSS_MmuPageSize()*i - track*sectorsInTrack*sectorSize)/sectorSize;
+		int sectors = USLOSS_MmuPageSize()/sectorSize;
+		result = P2_DiskWrite(P3_SWAP_DISK, track, first, sectors, page);
+		if (result != P1_SUCCESS) {
+			USLOSS_Console("write failed\n");
+			V(mutex);
+			return P3_OUT_OF_SWAP;
+		}
+		writeIndex = i;
+		result = P3FrameUnmap(*frame);
+		assert(result == P1_SUCCESS);
+		result = USLOSS_MmuSetAccess(*frame, 0);
+		assert(result == USLOSS_MMU_OK);
+	}
+	USLOSS_PTE *table;
+	result = P3PageTableGet(P1_GetPid(), &table);
+	assert(result == P1_SUCCESS);
+	if (table) {
+		for (int i = 0; i < numPages; i++) {
+			if (table[i].incore && table[i].frame == *frame) {
+				table[i].incore = 0;
+				if (writeIndex != -1) {
+					pagesOnDisk[writeIndex].pid = P1_GetPid();
+					pagesOnDisk[writeIndex].page = i;
+				}
+				break;
+			}
+		}
+	}
+	result = P3PageTableSet(P1_GetPid(), table);
+	assert(result == P1_SUCCESS);
+	allFrames[*frame].busy = TRUE;
+	V(mutex);
     return result;
 }
 /*
@@ -202,6 +333,10 @@ int
 P3SwapIn(int pid, int page, int frame)
 {
     int result = P1_SUCCESS;
+		if (!initialized) return P3_NOT_INITIALIZED;
+	if (pid < 0 || pid >= P1_MAXPROC) return P1_INVALID_PID;
+	if (page < 0 || page >= numPages) return P3_INVALID_PAGE;
+	if (frame < 0 || frame >= numFrames) return P3_INVALID_FRAME;
 
     /*****************
 
@@ -218,6 +353,33 @@ P3SwapIn(int pid, int page, int frame)
     V(mutex)
 
     *****************/
+	P(mutex);
+	int isSpace = FALSE, diskIndex;
+	for (int i = 0; i < maxFramesOnDisk; i++) {
+		if (pagesOnDisk[i].pid == pid && pagesOnDisk[i].page == page) diskIndex = i;
+		else if (pagesOnDisk[i].pid == -1) isSpace = TRUE;
+	}
+	if (diskIndex != maxFramesOnDisk) {
+		void *page;
+		result = P3FrameMap(frame, &page);
+		assert(result == P1_SUCCESS);
 
+		int track = USLOSS_MmuPageSize()*diskIndex/(sectorsInTrack*sectorSize);
+		int first = (USLOSS_MmuPageSize()*diskIndex - track*sectorsInTrack*sectorSize)/sectorSize;
+		int sectors = USLOSS_MmuPageSize()/sectorSize;
+		result = P2_DiskRead(P3_SWAP_DISK, track, first, sectors, page);
+		if (result != P1_SUCCESS) {
+			USLOSS_Console("read failed\n");
+			V(mutex);
+			return P3_OUT_OF_SWAP;
+		}
+		result = P3FrameUnmap(frame);
+		assert(result == P1_SUCCESS);
+	} else {
+		if (!isSpace) result = P3_OUT_OF_SWAP;
+		else result = P3_EMPTY_PAGE;
+	}
+	allFrames[frame].busy = FALSE;
+	V(mutex);
     return result;
 }
